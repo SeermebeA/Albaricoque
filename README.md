@@ -1,256 +1,178 @@
-# Albaricoque — Perimeter Human-Only Node (Arduino Nano 33 BLE Sense Rev2 + Edge Impulse)
+# **Albaricoque – Privacy-Preserving Human Detection Node (Edge AI Application Track)**
 
-> **Detección de personas sin cámaras**, preservando la privacidad, en puertas, accesos y cercas.  
-> Cobertura objetivo: **~0–3 m** en un sector de **~90°**.  
-> **Inferencia en el borde** con Edge Impulse sobre **Arduino Nano 33 BLE Sense Rev2**.  
-> **Prototipo** con carcasa impresa en 3D (PETG/TPU). LoRa está **diseñado** pero **no implementado** en esta fase.
+**Albaricoque** is a camera-free, privacy-preserving perimeter monitoring node capable of detecting **humans only** within **0–3 m** and a **~90° sector**, using hybrid **PIR + ultrasonic sensor fusion** and **TinyML inference** deployed on an **Arduino Nano 33 BLE Sense Rev2**.  
+This project is submitted to the **HackerEarth × Edge Impulse Hackathon 2025** under the **Edge AI Application Track**.
 
 ---
 
-## 1) Descripción general
+## 🧭 **Project Summary**
 
-**Albaricoque** es un nodo perimetral de bajo consumo que **detecta exclusivamente personas** sin recurrir a cámaras. Combina un arreglo **multiaxial de 4 sensores PIR (HC-SR501)** —para dirección y cinemática a partir del **orden** y los **Δt** de activación— con **3 sensores ultrasónicos (HC-SR04)** inclinados a **15°/45°/75°**, cuyos ecos se procesan en **ráfagas** (mediana y varianza) para estimar **distancia** y la **altura aparente** del objetivo. Estas señales se **fusionan** y alimentan un **modelo TinyML** (Edge Impulse) que ejecuta la inferencia **on-device** en un **Arduino Nano 33 BLE Sense Rev2**. El resultado final es una decisión rápida y confiable **humano vs. no humano** (animales/ambiente).
+Albaricoque runs all intelligence **on-device**, without cameras, cloud processing, or personal data collection. The system fuses directional PIR activation patterns with multi-angle ultrasonic distance deltas to build a unique motion signature that allows distinguishing **human presence** from **animals** and **environmental noise**.
 
-**Estado del prototipo:**  
-- LoRa está planificado pero **no implementado** (se diseñó la carcasa para alojar antena).  
-- Carcasa **sin sellado IP** (prototipo): impresa en 3D **PETG (estructura)** y **TPU (juntas)**.  
-- Montaje final validado: **1.5 m de altura**, **90°** respecto al suelo (apuntando al frente).
+<p align="center">
+  <img src="https://github.com/SeermebeA/Albaricoque/blob/main/Multimedia/img/IMG_1844.jpg" width="450">
+</p>
 
----
 
-## 2) Características clave
+A classification model trained in **Edge Impulse** identifies six behavior classes (Animal, Solo, Walk1–Walk4), while an additional anomaly detector filters invalid sensor frames.
 
-- **Privacy-by-design**: no usa cámaras, no guarda imágenes.  
-- **Fusión de sensores**: 4× PIR + 3× ultrasónico (15°/45°/75°).  
-- **Inferencia local**: Edge Impulse (SDK C++) en Arduino Nano 33 BLE Sense Rev2.  
-- **Baja latencia**: pipeline por eventos (trigger PIR → ráfagas ultrasónicas → features → inferencia).  
-- **Prototipado rápido**: carcasa 3D PETG/TPU preparada para futura antena LoRa.
+The system achieves **real-time inference (<1 ms)**, enabling deployment in low-power perimeter protection scenarios.
 
 ---
 
-## 3) Arquitectura técnica (alto nivel)
+## 🎯 **Problem Statement**
 
-```
-[ PIR x4 ]           [ Ultrasónico x3 ]
- (110° FOV)          (15° | 45° | 75°)
-    |                      |
-    |  orden/Δt PIR        | ráfagas -> mediana/varianza -> r (m)
-    |                      | geometría -> h = H − r·sin(θ)
-    |                      |
-    +----------[ Fusión de features ]----------+
-                                               |
-                                     [ Modelo EI (on-device) ]
-                                               |
-                                        [ Decisión Persona ]
-                                               |
-                                       [ Señal / Log serie ]
-```
+Most perimeter security systems depend on cameras or radar-like systems that:
 
-**Geometría clave:**  
-- Altura de montaje **H = 1.5 m**  
-- Ángulos ultrasónicos: **θ ∈ {15°, 45°, 75°}**  
-- **Altura aparente**: \( h = H - r \cdot \sin(\theta) \)
+- Violate privacy  
+- Perform poorly at night or under rain  
+- Require high bandwidth and storage  
+- Are costly or invasive  
+- Produce frequent false alarms (animals, wind)
+
+**Objective:**  
+Design a **low-power**, **privacy-first**, **edge-native** hardware node that can reliably detect **humans only**, without capturing or storing images.
+
+Albaricoque is designed specifically for rural entrances, farm access points, fences, construction sites, and private properties needing **non-intrusive security**.
 
 ---
 
-## 4) Hardware
+## 🛠️ **Hardware Architecture**
 
-### 4.1 Bill of Materials (BOM)
+| Component | Description |
+|----------|-------------|
+| **Arduino Nano 33 BLE Sense Rev2** | nRF52840 ARM Cortex-M4F, runs full TinyML inference |
+| **4 × PIR HC-SR501** | Direction, kinematics, activation deltas |
+| **3 × Ultrasonic HC-SR05 (15°/45°/75°)** | Distance, displacement, height approximation |
+| **3D-printed Enclosure (PETG/TPU)** | Prototype, no IP rating; includes space for future LoRa antenna |
+| **Level Shifters / Dividers** | Required since HC-SR05 echo output is 5 V |
 
-| Componente | Cant. | Notas |
-|---|---:|---|
-| Arduino Nano 33 BLE Sense Rev2 | 1 | nRF52840, 3.3 V lógico |
-| PIR HC-SR501 | 4 | Ajustar sensibilidad/tiempo; FOV ~110° |
-| Ultrasonido HC-SR04 | 3 | **ECHO es 5 V** → usar **level shifting/divisor** a 3.3 V |
-| Impresiones 3D (PETG/TPU) | — | Carcasa prototipo, juntas blandas |
-| Tornillería, cableado, protoboard/PCB | — | Según diseño |
-
-> **Seguridad eléctrica:** el **Nano 33 BLE Sense Rev2 es 3.3 V**. Los **HC-SR04** entregan **ECHO a 5 V**: usa **divisor resistivo** o **level shifter** antes de entrar a los pines del Arduino.
-
-### 4.2 Notas mecánicas (prototipo)
-- Cuerpo/tapa en **PETG**, juntas en **TPU 95A** (prototipo sin IP).  
-- Alojamiento y **reserva para antena LoRa** (fase futura).  
-- Viseras/laberintos para PIR y **hood** para transductores ultrasónicos.
+**Prototype installation:**  
+Mounted at **1.5 m height**, angled **90° forward** (initial 45° downward configuration replaced after field tests).
 
 ---
 
-## 5) Metodología y datos
+## 🧩 **Sensor Fusion Pipeline**
 
-- **Captura en campo** con variación sistemática de **distancia (0–3 m)**, **azimut (−45°…+45°)**, **velocidad** (lento/normal/rápido) y **postura** (de pie, agachado, gateo).  
-- **Negativos duros**: **perros**, **ramas con viento**, **lluvia**.  
-- **Features**: orden/Δt PIR, duración y % de solape; mediana/varianza de ráfagas ultrasónicas; **h** (altura aparente); estimación de velocidad; compensación térmica (velocidad del sonido).  
-- **Selección de umbral** con **curvas ROC**; evaluación por **matrices de confusión** segmentadas por rango y azimut.
+### PIR features
+- Binary activation per sensor  
+- Activation order  
+- Δt between PIR channels  
+- Motion direction estimation  
 
----
-
-## 6) Flujo de funcionamiento
-
-1. **Trigger por PIR** (cualquier canal activa el evento).  
-2. **Secuencia ultrasónica** (para evitar crosstalk): 75° → 45° → 15°, **ráfagas** con **mediana** y control de outliers.  
-3. **Cálculo de features** (r, varianza, **h** por sensor, fusión robusta).  
-4. **Inferencia** (modelo Edge Impulse on-device).  
-5. **Decisión** y **salida** (log serie; en el futuro, **LoRa**).
-
----
-
-## 7) Integración con Edge Impulse
-
-1. Crear proyecto en **Edge Impulse** (público o privado).  
-2. Definir **clases**: `human` / `nonhuman` (animal/ambiente).  
-3. Cargar dataset etiquetado (o adquirir con SDK).  
-4. Diseñar **bloque de features**: señales PIR + ultrasónico (mediana/varianza) + `h`.  
-5. Entrenar y **cuantizar (INT8)**.  
-6. **Export** SDK C++ e incluir en firmware (p. ej. `Albaricoque_inferencing.h`).  
-7. Medir **latencia**, **memoria** y **exactitud** on-device.
-
-**Pseudocódigo de inferencia:**
-```cpp
-#include "Albaricoque_inferencing.h"  // generado por EI
-
-// features[] = {pir_order, pir_dt1, pir_dt2, r15, r45, r75, h15, h45, h75, var15, var45, var75, ...}
-EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false);
-if (result.classification[HUMAN].value >= THRESH) {
-  // Persona detectada
-}
+### Ultrasonic features
+- Sequential firing to avoid cross-talk  
+- Median of burst readings  
+- Outlier rejection  
+- Baseline compensation  
+- Distance deltas (15/45/75°)  
+- Optional height estimation:  
 ```
 
----
-
-## 8) Desarrollo de firmware
-
-**Entorno recomendado:** [PlatformIO](https://platformio.org/)  
-`platformio.ini` (ejemplo):
-
-```ini
-[env:nano33ble]
-platform = nordicnrf52
-board = nano33ble
-framework = arduino
-monitor_speed = 115200
-build_flags =
-  -D SERIAL_BAUD=115200
-  ; agrega defines necesarios para EI
-lib_deps =
-  ; (no requerido para PIR/HC-SR04 básicos)
-```
-
-**Comandos básicos:**
-```bash
-# Compilar
-pio run
-
-# Subir firmware (ajusta puerto)
-pio run -t upload --upload-port /dev/ttyACM0
-
-# Monitor serie
-pio device monitor -b 115200
-```
-
----
-
-## 9) Métricas objetivo
-
-- **Detección:** alta **sensibilidad** (TPR) en personas; **baja FPR** (animales/ambiente).  
-- **Latencia:** pipeline < **300 ms** (objetivo).  
-- **Cobertura:** **0–3 m**, sector ~**90°**.  
-- **Privacidad:** sin video, sin imágenes.
-
-> **Nota:** reportar métricas con **matrices de confusión** por bandas de distancia y azimut, además de **FAR** (falsas alarmas por día) en escenarios reales.
-
----
-
-## 10) Roadmap (alto nivel)
-
-- [x] Arquitectura y geometría (15°/45°/75°, H=1.5 m).  
-- [x] Prototipo mecánico (PETG/TPU) y electrificación.  
-- [x] Captura inicial y baseline de features.  
-- [ ] Entrenamiento EI + integración SDK en firmware.  
-- [ ] Validación en campo (puerta/acceso/cerca) y ajuste de umbral.  
-- [ ] LoRa P2P (futuro) + receptor y dashboard.
-
----
-
-## 11) Estructura sugerida del repositorio
+h = H – r · sin(θ)
 
 ```
-.
-├── firmware/                 # Código Arduino/PlatformIO
-│   ├── src/
-│   ├── include/
-│   └── platformio.ini
-├── docs/
-│   ├── ARCHITECTURE.md       # Decisiones, geometría, fórmulas
-│   └── DATASET.md            # Protocolo de captura y etiquetado
-├── mechanical/               # STL/STEP de la carcasa (prototipo)
-├── edge-impulse/             # Notas del proyecto EI / enlaces
-├── hardware/                 # BOM y esquemas simples
-└── README.md
+
+### TinyML inference
+- 6-class classifier  
+- 1-D anomaly detection (K-means)  
+- Real-time embedded inference (C++ SDK)
+
+---
+
+## 📊 **Dataset Description**
+
+Custom dataset collected across:
+
+- **Distances:** 0–3 m  
+- **Azimuth:** –45° to +45°  
+- **Velocities:** slow, normal, fast  
+- **Postures:** standing, crouching, crawling  
+- **Hard negatives:** dogs, wind-moved branches, rain  
+
+### Input axes (7)
 ```
 
----
+P1, P2, P3, P4, S1, S2, S3
 
-## 12) Limitaciones y trabajo futuro
+```
 
-- **LoRa**: diseñado pero **no** operativo (requiere integración de radio + protocolo).  
-- **Protección ambiental**: la carcasa **no es IP** en esta fase (prototipo).  
-- **Transductores**: para producción, considerar **ultrasónicos sellados** y **vent ePTFE**.  
-- **Auto-calibración**: incorporar IMU para compensar ángulo real y baseline de suelo nocturno.
-
----
-
-## 13) Licencia
-
-Este proyecto se distribuye bajo **MIT License** (ver `LICENSE`).
+### Window configuration
+- Window size: **7000 ms**
+- Stride: **1000 ms**
+- Sampling freq: **3.57 Hz**
+- Zero-padding: **enabled**
 
 ---
 
-## 14) Agradecimientos
+## 🧠 **Model Design (Impulse)**
 
-- Comunidad Edge Impulse y makers que inspiran el desarrollo **edge-native**.  
-- Contribuciones y *feedback* sobre escenarios de prueba en exteriores.
+### Processing Blocks
+```
 
-## 15) Final Logs & Analysis
+Time Series (7 axes)
+↓
+Flatten
+↓
+Classification (6 classes)
+↓
+Anomaly Detection (K-means)
 
-**Raw samples (excerpt):**
-```text
+```
+
+### Classes
+- `Animal` — Activations generated by animals (e.g., dogs or other non-human movers) within the 0–3 m range.
+- `Solo` — Background conditions with no human or animal present; ambient noise, wind-driven motion, or static environment.
+- `Walk1` — Human walking at the closest range (~0–0.3 m).
+- `Walk2` — Human walking at a short-to-medium range (~0.3–0.6 m).
+- `Walk3` — Human walking at a medium-to-far range (~0.6–0.9 m).
+- `Walk4` — Human walking at the farthest range (~0.9–1.2 m) still inside the sensor’s coverage sector.
+
+---
+
+## 📈 **Model Performance**
+
+| Metric | Value |
+|--------|--------|
+| **Accuracy** | **84.7%** |
+| **Loss** | 0.37 |
+| **Inference time** | **1 ms (on-device)** |
+| **DSP time** | 0 ms |
+
+### Validated Confusion Matrix (Summary)
+- **Animal:** 100%  
+- **Solo:** 89.7%  
+- **Walk1:** 92.1%  
+- **Walk3:** 81.3%  
+- **Walk4:** 100%  
+- **Walk2:** 62.5% (needs more samples)
+
+---
+
+## 🧪 **Final System Logs & Analysis**
+
+### Raw sample logs (excerpt)
+```
+
 TS(ms): 1430071 | sample: 0 | PIR: 1,0,0,1 | US(cm): 38,42,-1 | Delta(cm): 156.00,153.00,0.00
 TS(ms): 1430348 | sample: 1 | PIR: 1,0,0,0 | US(cm): 32,-1,33 | Delta(cm): 162.00,0.00,164.00
-TS(ms): 1430651 | sample: 2 | PIR: 1,0,0,0 | US(cm): 30,-1,-1 | Delta(cm): 164.00,0.00,0.00
-TS(ms): 1430918 | sample: 3 | PIR: 0,0,0,0 | US(cm): 27,304,-1 | Delta(cm): 167.00,109.00,0.00
-TS(ms): 1431222 | sample: 4 | PIR: 0,1,0,0 | US(cm): -1,303,-1 | Delta(cm): 0.00,108.00,0.00
-TS(ms): 1431457 | sample: 5 | PIR: 0,1,0,0 | US(cm): 25,-1,23 | Delta(cm): 169.00,0.00,174.00
-TS(ms): 1431761 | sample: 6 | PIR: 0,0,0,0 | US(cm): 24,-1,-1 | Delta(cm): 170.00,0.00,0.00
-TS(ms): 1432038 | sample: 7 | PIR: 0,0,0,0 | US(cm): 25,-1,-1 | Delta(cm): 169.00,0.00,0.00
-TS(ms): 1432290 | sample: 8 | PIR: 0,0,0,0 | US(cm): 23,28,-1 | Delta(cm): 171.00,167.00,0.00
-TS(ms): 1432584 | sample: 9 | PIR: 0,0,0,0 | US(cm): 46,291,-1 | Delta(cm): 148.00,96.00,0.00
-TS(ms): 1432871 | sample: 10 | PIR: 0,0,1,1 | US(cm): -1,-1,23 | Delta(cm): 0.00,0.00,174.00
-TS(ms): 1433122 | sample: 11 | PIR: 0,0,1,1 | US(cm): 23,-1,26 | Delta(cm): 171.00,0.00,171.00
-TS(ms): 1433425 | sample: 12 | PIR: 0,0,0,1 | US(cm): 17,-1,-1 | Delta(cm): 177.00,0.00,0.00
-TS(ms): 1433703 | sample: 13 | PIR: 0,0,0,1 | US(cm): 18,-1,-1 | Delta(cm): 176.00,0.00,0.00
-TS(ms): 1433928 | sample: 14 | PIR: 0,0,0,1 | US(cm): 18,20,21 | Delta(cm): 176.00,175.00,176.00
-TS(ms): 1434285 | sample: 15 | PIR: 0,0,0,1 | US(cm): -1,-1,-1 | Delta(cm): 0.00,0.00,0.00
-TS(ms): 1434536 | sample: 16 | PIR: 0,0,0,1 | US(cm): 17,-1,-1 | Delta(cm): 177.00,0.00,0.00
-TS(ms): 1434813 | sample: 17 | PIR: 0,1,0,1 | US(cm): 16,-1,-1 | Delta(cm): 178.00,0.00,0.00
-TS(ms): 1435091 | sample: 18 | PIR: 0,1,0,1 | US(cm): 18,-1,-1 | Delta(cm): 176.00,0.00,0.00
-TS(ms): 1435315 | sample: 19 | PIR: 0,0,0,0 | US(cm): 13,17,13 | Delta(cm): 181.00,178.00,184.00
-TS(ms): 1435593 | sample: 20 | PIR: 1,0,0,0 | US(cm): 12,20,12 | Delta(cm): 182.00,175.00,185.00
-TS(ms): 1435879 | sample: 21 | PIR: 1,0,1,0 | US(cm): 17,182,15 | Delta(cm): 177.00,13.00,182.00
-TS(ms): 1436181 | sample: 22 | PIR: 1,0,1,0 | US(cm): 25,116,-1 | Delta(cm): 169.00,79.00,0.00
-TS(ms): 1436438 | sample: 23 | PIR: 0,0,0,0 | US(cm): 113,115,27 | Delta(cm): 81.00,80.00,170.00
+...
 TS(ms): 1436720 | sample: 24 | PIR: 0,0,0,0 | US(cm): 114,107,135 | Delta(cm): 80.00,88.00,62.00
-```
-- **Samples:** 25 from **TS 1430071 ms** to **1436720 ms** (span **6649 ms**); average sampling period ≈ **277.0 ms**.
-- **Missing echoes** are marked as `-1`. Outlier long echoes (e.g., ~291–304 cm) indicate multi‑path or spurious reflections under outdoor conditions.
-- **Ultrasonic CH0** → valid: 22, invalid: 3, range: 12–114 cm, mean: 31.41 cm.
-- **Ultrasonic CH1** → valid: 12, invalid: 13, range: 17–304 cm, mean: 128.75 cm.
-- **Ultrasonic CH2** → valid: 10, invalid: 15, range: 12–135 cm, mean: 32.8 cm.
-- **PIR activation totals** (over 25 samples): CH0=6, CH1=4, CH2=4, CH3=10.
-- **Pattern observation:** bursts of short ranges (13–32 cm) appear when PIRs 2–3 fire, consistent with a subject traversing close to the sensor plane; mid‑range returns (80–135 cm) co‑occur with no PIR activity (cool‑down/background).
-- **Delta(cm)** fields are derived features (e.g., apparent height or geometry transforms) and align with missing echoes when zeroed.
 
-**Edge Impulse inference (sample output):**
-```text
-Predictions (DSP: 0 ms., Classification: 1 ms., Anomaly: 0 ms.):
+```
+
+### Statistical analysis
+- Samples: **25**
+- Duration: **6649 ms**
+- Avg sampling interval: **277 ms**
+- Outlier echoes: present (291–304 cm) due to multipath reflections
+- PIR activation counts (25 samples):  
+  - CH0=6, CH1=4, CH2=4, CH3=10
+
+### Inference output example
+```
+
+Predictions (DSP: 0 ms., Classification: 1 ms.)
 Animal: 0.00391
 Solo: 0.00391
 Walk1: 0.69922
@@ -260,9 +182,100 @@ Walk4: 0.03906
 anomaly score: -0.867
 Clase detectada: WALK1
 
-Starting inferencing in 2 seconds...
-Sampling at TS(ms): 1410121 ...
+````
+
+---
+
+## 🚀 **Deployment (Arduino + Edge Impulse)**
+
+The project uses:
+
+- **Edge Impulse C++ SDK**
+- **PlatformIO (Arduino framework)**
+
+Minimal inference snippet:
+```cpp
+signal_t signal;
+numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+run_classifier(&signal, &result, false);
+````
+
+Complete firmware is included in this repository under `/firmware`.
+
+---
+
+## 📹 **Demo Video**
+
+YouTube link:
+
+[► Watch the build-and-demo video on YouTube](https://youtu.be/JdEEtX0hX48)
+
+<details>
+<summary>Embed (click to expand)</summary>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/JdEEtX0hX48" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+</details>
+
+---
+
+## 🧭 **Project Impact**
+
+### Innovation
+
+* Full human detection without cameras
+* Hybrid PIR/ultrasonic fusion
+* Real-time TinyML on constrained MCU
+* Privacy-by-design hardware
+
+### Real-world impact
+
+* Useful for rural properties, farms, private gates
+* No personal data → compliant with strict privacy norms
+* Low power, low cost, high reliability
+* Detects humans but ignores animals and foliage movement
+
+---
+
+## 🔮 **Future Work**
+
+* Add LoRa/LoRaWAN uplink
+* Improve ultrasonic sealing (IP65)
+* Expand dataset for Walk2 class
+* Multi-node perimeter mesh
+* Weather-aware anomaly filtering
+
+---
+
+## 📂 **Repository Structure**
+
 ```
-- **On‑device latency:** ~**1 ms** classification (reported), confirming real‑time feasibility.
-- **Predicted class:** `WALK1` (≈0.70) with a low anomaly score (close to the learned manifold).
-- **Next steps:** broaden dataset for `WALK2–WALK4`, add hard negatives under similar lighting/weather, and tune the operating threshold (ROC) to target **TPR ≥95%** with **<1 false alarm/day**.
+.
+├── firmware/
+│   ├── src/
+│   ├── include/
+│   └── platformio.ini
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── DATASET.md
+├── mechanical/
+├── hardware/
+├── edge-impulse/
+└── README.md
+```
+
+---
+
+## 📄 **License**
+
+Licensed under the **MIT License**.
+
+---
+
+## 🙌 **Acknowledgments**
+
+* Edge Impulse Team
+* TinyML & sensor fusion open-source community
+* Mentors & reviewers from the Hackathon
+
+
