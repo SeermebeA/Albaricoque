@@ -80,6 +80,20 @@ h = H – r · sin(θ)
 
 ---
 
+## 🔧 **Baseline subtraction for cleaner ultrasonic features**
+
+To improve the interpretability of the ultrasonic data, the firmware performs an **initial calibration step** during boot. Each HC-SR05 sensor takes a set of baseline measurements (~20 samples), computes a valid average distance, and stores it as a **static background reference**.
+
+During runtime, every new ultrasonic reading is converted to a **Δ-distance feature**:
+
+* `delta = |current_distance - baseline|`
+* Small variations (<10 cm) are forced to **0** to suppress noise.
+* Only meaningful deviations caused by a **warm moving object** (validated by PIR activation) are passed to the ML model.
+
+This ensures the Edge Impulse classifier receives features representing **foreground movement only**, rather than absolute distance, improving class separation and reducing false positives from static objects, walls, or gradual environmental drift.
+
+---
+
 ## 📊 **Dataset Description**
 
 Custom dataset collected across:
@@ -167,7 +181,7 @@ TS(ms): 1436720 | sample: 24 | PIR: 0,0,0,0 | US(cm): 114,107,135 | Delta(cm): 8
 - Avg sampling interval: **277 ms**
 - Outlier echoes: present (291–304 cm) due to multipath reflections
 - PIR activation counts (25 samples):  
-  - CH0=6, CH1=4, CH2=4, CH3=10
+- CH0=6, CH1=4, CH2=4, CH3=10
 
 ### Inference output example
 ```
@@ -183,6 +197,8 @@ anomaly score: -0.867
 Clase detectada: WALK1
 
 ````
+➡️ **Full inference log available here:**
+[`Data acquisition / Final Log.txt`](https://github.com/SeermebeA/Albaricoque/blob/main/Data%20acquisition/Final%20Log.txt)
 
 ---
 
@@ -209,13 +225,6 @@ Complete firmware is included in this repository under `/firmware`.
 YouTube link:
 
 [► Watch the build-and-demo video on YouTube](https://youtu.be/JdEEtX0hX48)
-
-<details>
-<summary>Embed (click to expand)</summary>
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/JdEEtX0hX48" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
-</details>
 
 ---
 
@@ -247,25 +256,6 @@ YouTube link:
 
 ---
 
-## 📂 **Repository Structure**
-
-```
-.
-├── firmware/
-│   ├── src/
-│   ├── include/
-│   └── platformio.ini
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── DATASET.md
-├── mechanical/
-├── hardware/
-├── edge-impulse/
-└── README.md
-```
-
----
-
 ## 📄 **License**
 
 Licensed under the **MIT License**.
@@ -277,5 +267,3 @@ Licensed under the **MIT License**.
 * Edge Impulse Team
 * TinyML & sensor fusion open-source community
 * Mentors & reviewers from the Hackathon
-
-
