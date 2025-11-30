@@ -119,6 +119,16 @@ P1, P2, P3, P4, S1, S2, S3
 
 ---
 
+## 🧠 Edge Impulse Project
+
+The inference model used in **Albaricoque** is publicly available on Edge Impulse.
+You can explore the dataset, processing blocks, model architecture, and performance metrics at the following link:
+
+🔗 **Edge Impulse Live Project:**
+[https://studio.edgeimpulse.com/public/840164/live](https://studio.edgeimpulse.com/public/840164/live)
+
+---
+
 ## 🧠 **Model Design (Impulse)**
 
 ### Processing Blocks
